@@ -1,4 +1,4 @@
-#include "UIToolkit/X.h"
+#include "UIToolkit/UI.h"
 #include <stdio.h>
 #include <unistd.h>
 
@@ -16,8 +16,14 @@ int main()
 	printf("Panel ID %lui (%i) on root %lui\n", win.id, win.attributes.map_state, root.id);
 	
 	sleep(1);
-	X.close(panel);
+	X.close(panel);	
 	X.close(root);
+	
+	uiWindow ui = UI.open(300, 300, 300, 200);
+	UI.draw(ui, "Hello!");
+	
+	sleep(1);
+	UI.close(ui);
 	
 	return 0;
 }

@@ -13,7 +13,6 @@
 // Data structures
 
 typedef char* text;
-typedef float* vec;
 typedef void* listItem;
 typedef listItem* list;
 
@@ -23,8 +22,8 @@ typedef struct listMetadata
 	int size, length, index;
 	list parent;
 	list info;
-	void *storage,	// Original allocation. Used for free
-		*bookend;	// First negative item is always set to zero: null-terminated in reverse.
+	void *storage,	// Original allocation. Used for free()
+		*bookend;	// First negative item is always set to zero, i.e. null-terminated in reverse
 } listMetadata;
 
 
@@ -32,52 +31,53 @@ typedef struct listMetadata
 
 struct List
 {
+	// Create and delete
 	list	(*new)	(text key);
-	void	(*delete)	(list);
+	list	(*delete)	(list);
 	
+	// Add and retrieve items
+	list	(*add)	(list, listItem);
+	listItem	(*get)	(list, text);
+	
+	// Metadata
 	int	(*length)	(list);
 	
-	list	(*add)	(list, listItem);
-	list	(*text)	(list, text key, text val);
-	list	(*vec)	(list, text key, vec val, int length);
+	// Modify
+	list	(*unwrap)	(list);
 	
-	list	(*join)	(list, list);
-	list (*chain)	(list, ...);
-	
+	// Print
 	void (*json)	(list);
 };
 
 struct Item
 {
-	text	(*type)	(listItem);
-	text	(*name)	(listItem);
-	
-	text	(*info)	(listItem, text infoKey);
-	listItem	(*set)	(listItem, text infoKey, text val);
-	listItem	(*unset)	(listItem, text infoKey);
-	
+	// Create and delete
 	text	(*text)	(text key, text val);
-	
-	list	(*wrap)	(listItem, text key);
-	list	(*unwrap)	(list);
+	listItem	(*custom)	(text key, listItem val, text type, int size, int length);
 	list	(*delete)	(listItem);
+	
+	// Get and set metadata
+	text	(*name)	(listItem);
+	text	(*type)	(listItem);
+	text	(*get)	(listItem, text infoKey);
+	listItem	(*set)	(listItem, listItem infoItem);
 };
 
 
 // Private functions
 
 
-// Fat
+// Fat (some slightly gnarly pointer calculations)
 
 list listHideFat(char* fat)
 {
 	return (list)(fat + sizeof(listMetadata));
 }
 
-#define RoundTo	0x100
-#define RoundMask	~0xff
+#define RoundToNearest	0x10
+#define RoundMask	~0xf
 #define listRoundDown(ptr)	 ((list)((uintptr_t)ptr & RoundMask))
-#define listRoundUp(ptr)	 ( (list) (((uintptr_t)ptr & RoundMask) + RoundTo) )
+#define listRoundUp(ptr)	 ( (list) (((uintptr_t)ptr & RoundMask)+RoundToNearest) )
 
 listMetadata* listGetFat(list noFat)
 {
@@ -87,14 +87,14 @@ listMetadata* listGetFat(list noFat)
 }
 
 
-// Print
+// Print (printf gets a bit ugly!)
 
-void listJsonWorker(list items, int* indent)
+void listJsonWorker(list L, int* indent)
 {
-	printf("\"%s\": {", listGetFat(items)->key);
+	printf("\"%s\": {", listGetFat(L)->key);
 	*indent += 2;
 	
-	forEach(item in items,
+	forEach(item in L,
 		printf("\n");
 		for(int i = 0; i < *indent; i++) { printf(" "); }
 
@@ -116,21 +116,19 @@ void listJsonWorker(list items, int* indent)
 	printf("},");
 }
 
-void listJson(list items)
+void listJson(list L)
 {
 	int indent = 0;
-	listJsonWorker(items, &indent);
+	listJsonWorker(L, &indent);
 	printf("\b \n");
 }
 
 
 // Allocate, grow, delete
 
-int listDefaultSize = 20;
-
 list listAllocate(list oldList, int N)
 {
-	int size = sizeof(listMetadata) + N*(sizeof(listItem)) + RoundTo;
+	int size = sizeof(listMetadata) + N*(sizeof(listItem)) + RoundToNearest;
 	
 	char* storage = oldList? realloc(listGetFat(oldList)->storage, size) : malloc(size);
 	iff(storage orFail NULL);
@@ -138,6 +136,7 @@ list listAllocate(list oldList, int N)
 	memset(storage, 0, size);
 	
 	list L = listRoundUp(storage + sizeof(listMetadata));
+	
 	listMetadata* metadata = listGetFat(L);
 	metadata->storage = storage;
 	metadata->size = N;
@@ -145,6 +144,8 @@ list listAllocate(list oldList, int N)
 	
 	return L;	
 }
+
+int listDefaultSize = 20;
 
 list listNew(text key)
 {
@@ -162,31 +163,29 @@ list listGrow(list oldList)
 
 // Set, add
 
-list listSetItem(list items, int index, listItem item)
+list listSetItem(list L, int index, listItem item)
 {
-	while(index + 1 >= listGetFat(items)->size)
-		{ listGrow(items); }
-	iff(items orFail NULL); // In case realloc fails
+	while(index + 1 >= listGetFat(L)->size)	// +1 for NULL-end
+		{ listGrow(L); }
+	iff(L orFail NULL); // In case realloc fails
 	
-	items[index] = item;
+	L[index] = item;
 	
-	iff(item orFail items);
-	listGetFat(item)->parent = items;
+	iff(item orFail L);
+	listGetFat(item)->parent = L;
 	listGetFat(item)->index = index;
 
-	return items;
+	return L;
 }
 
-list listAddItem(list items, listItem item)
+list listAddItem(list L, listItem item)
 {
-	iff(item orFail items);
+	int index = listGetFat(L)->length;
+	L = listSetItem(L, index, item);
 	
-	int index = listGetFat(items)->length;
-	items = listSetItem(items, index, item);
+	listGetFat(L)->length += 1;
 	
-	listGetFat(items)->length += 1;
-	
-	return items;
+	return L;
 }
 
 
@@ -217,23 +216,23 @@ void listFree(list L)
 	free(listGetFat(L)->storage);
 }
 
-void listDelete(list items)
+list listDelete(list L)
 {
-	iff(items orFail);
+	iff(L orFail NULL);	// To avoid deleting a NULL info list
 	
-	ifeq(listGetFat(items)->type is "list",
-		forEach(item in items,
+	ifeq(listGetFat(L)->type is "list",
+		forEach(item in L,
 			listDelete(item);
-		)
-	)
-	listDelete(listGetFat(items)->info);
-	listFree(items);
+		);
+	);
+	listDelete(listGetFat(L)->info);
+	listFree(L);
+	
+	return NULL;
 }
 
-list listRemove(listItem item)
+list listRemoveWithoutDelete(listItem item)
 {
-	iff(item orFail NULL);
-	
 	list parent = listGetFat(item)->parent;
 	
 	if(parent)
@@ -241,27 +240,34 @@ list listRemove(listItem item)
 		int index = listGetFat(item)->index;
 		forEach(tailItem in parent + index + 1,
 			parent = listSetItem(parent, index + tailItemIndex, tailItem);
-		)
+		);
 		parent[listGetFat(parent)->length - 1] = NULL;
 		listGetFat(parent)->length -= 1;
+		listGetFat(item)->parent = NULL;
 	}
 	
-	listDelete(item);
 	return parent;
+}
+
+list listDeleteItem(listItem item)
+{
+	list L = listRemoveWithoutDelete(item);
+	listDelete(item);
+	return L;
 }
 
 
 // Add text, vec
 
-list listAddText(list items, text key, text val)
+list listAddText(list L, text key, text val)
 {
 	text item = listTextItem(key, val);
-	return listAddItem(items, item);
+	return listAddItem(L, item);
 }
-list listAddVec(list items, text key, vec val, int length)
+list listAddVec(list L, text key, vec val, int length)
 {
 	vec item = listMakeItem(key, val, "vec", sizeof(float), length);
-	return listAddItem(items, item);
+	return listAddItem(L, item);
 }
 
 
@@ -291,18 +297,22 @@ list listWrapItem(listItem item, text key)
 
 // Insert
 
-list listInsertItem(list items, int index, list item)
+list listInsertItem(list L, int index, list item)
 {
-	int originalLength = listGetFat(items)->length;
+	if(listGetFat(item)->parent == L)
+		{ L = listRemoveWithoutDelete(item); }
+	
+	int originalLength = listGetFat(L)->length;
 	
 	// Shift items toward end in reverse: from last (length - 0...) to insert location (index)
-	forEach(tailProgress in items + index,
-		items = listSetItem(items, originalLength - tailProgressIndex, items[originalLength - tailProgressIndex - 1]);
-	)
-	items = listSetItem(items, index, item);
-	listGetFat(items)->length += 1;
+	forEach(tailProgress in L + index,
+		L = listSetItem(L, originalLength - tailProgressIndex, L[originalLength - tailProgressIndex - 1]);
+	);
 	
-	return items;
+	L = listSetItem(L, index, item);
+	listGetFat(L)->length += 1;
+	
+	return L;
 }
 
 list listInsertAfter(listItem item, listItem insert)
@@ -332,20 +342,20 @@ list listUnwrapChildren(list node)
 	forEach(child in node,
 		parent = listInsertBefore(node, child);
 		node[childIndex] = NULL;	// Remove relocated child from node. Prevents delete later.
-	)
+	);
 	
-	parent = listRemove(node);
+	parent = listDeleteItem(node);
 	return parent;
 }
 
 
 // Find
 
-listItem listFind(list items, text key)
+listItem listFind(list L, text key)
 {
-	forEach(item in items,
+	forEach(item in L,
 		ifeq(listGetFat(item)->key is key, return item;)
-	)
+	);
 	return NULL;
 }
 
@@ -362,10 +372,10 @@ list listReplace(listItem A, listItem B)
 
 // Chain
 
-list listChain(list item, ...)
+list listChain(list L, ...)
 {
 	va_list args;
-	va_start(args, item);
+	va_start(args, L);
 	
 	list (*fn)();
 	while(fn = va_arg(args, list(*)()))
@@ -375,13 +385,13 @@ list listChain(list item, ...)
 		while(var[i++] = va_arg(args, listItem)) {}
 		switch(i)
 		{
-			case 1: item = fn(item); break;
-			case 2: item = fn(item, var[0]); break;
-			case 3: item = fn(item, var[0], var[1]); break;
+			case 1: L = fn(L); break;
+			case 2: L = fn(L, var[0]); break;
+			case 3: L = fn(L, var[0], var[1]); break;
 		}
 	}
-		
-	return item;
+	
+	return L;
 }
 
 
@@ -409,14 +419,14 @@ listItem listSetInfo(listItem item, text key, text newVal)
 
 listItem listUnsetInfo(listItem item, text key)
 {
-	listGetFat(item)->info = listRemove(listGetInfo(item, key));
+	listGetFat(item)->info = listDeleteItem(listGetInfo(item, key));
 	return item;
 }
 
 
 // Simple accessors
 
-int listGetLength(list items) { return listGetFat(items)->length; }
+int listGetLength(list L) { return listGetFat(L)->length; }
 text listGetType(listItem item) { return listGetFat(item)->type; }
 text listGetKey(listItem item) { return (text)(listGetFat(item)->key); }
 
@@ -427,31 +437,24 @@ struct List List = {
 	listNew,
 	listDelete,
 	
-	listGetLength,
-	
 	listAddItem,
-	listAddText,
-	listAddVec,
+	listFind,
 	
-	listJoin,
-	listChain,
+	listGetLength,
+	listUnwrapChildren,
 	
 	listJson
 };
 
 struct Item Item = {
-	listGetType,
-	listGetKey,
-	
-	listGetInfo,
-	listSetInfo,
-	listUnsetInfo,
-	
 	listTextItem,
+	listMakeItem,
+	listDeleteItem,
 	
-	listWrapItem,
-	listUnwrapChildren,
-	listRemove
+	listGetKey,
+	listGetType,
+	listGetInfo,
+	listSetInfo
 };
 
 #endif

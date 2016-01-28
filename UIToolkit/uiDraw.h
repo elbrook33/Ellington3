@@ -3,8 +3,8 @@
 
 
 // Requirements
-//~ #include "UI.h"
-typedef void* uiWindow;
+#include "UI.h"
+
 
 // Headers
 uiWindow uiDrawPar(uiWindow, list par, float* x, float* y);
@@ -22,7 +22,6 @@ uiWindow uiDrawTag(uiWindow ui, list tag, float* x, float* y);
 
 
 // Setup
-
 uiWindow uiDraw(uiWindow ui, list doc)
 {
 	//~ if(!ui.canvas.markup || !*ui.canvas.markup) { return uiNoStop; }
@@ -58,10 +57,10 @@ uiWindow uiDrawPar(uiWindow ui, list par, float* x, float* y)
 {
 	forEach(tab in par,
 		either
-			o (Item.info(tab, "Centre")) { ui = uiDrawCentre(ui, tab, x, y); }
-			o (Item.info(tab, "Right")) { ui = uiDrawRight(ui, tab, x, y); }
-			o (true) { ui = uiDrawLeft(ui, tab, x, y); }
-	)
+			o (Item.info(tab, "Centre"), then ui = uiDrawCentre(ui, tab, x, y))
+			o (Item.info(tab, "Right"), then ui = uiDrawRight(ui, tab, x, y))
+			o (otherwise, ui = uiDrawLeft(ui, tab, x, y))
+	);
 	
 	// Add par measurement
 	printf("\n");
@@ -75,11 +74,11 @@ uiWindow uiDrawTab(uiWindow ui, list tab, float* x, float* y)
 	
 	forEach(word in tab,
 		either
-			o (eq(Item.name(word) is "Tag")) { ui = uiDrawTag(ui, word, x, y); }
-			o (Item.info(word, "Bold")) { ui = uiDrawBold(ui, word, x, y); }
-			o (Item.info(word, "Highlight")) { ui = uiDrawHighlight(ui, word, x, y); }
-			o (true) { ui = uiDrawWord(ui, word, x, y); }
-	)
+			o (eq(Item.name(word) is "Tag"), then ui = uiDrawTag(ui, word, x, y))
+			o (Item.get(word, "Bold"), then ui = uiDrawBold(ui, word, x, y))
+			o (Item.get(word, "Highlight"), then ui = uiDrawHighlight(ui, word, x, y))
+			o (otherwise, ui = uiDrawWord(ui, word, x, y))
+	);
 	
 	// Add tab measurement
 	printf("\t");
@@ -141,12 +140,15 @@ uiWindow uiDrawImage(uiWindow ui, list image, float* x, float* y)
 	return ui;
 }
 
-uiWindow uiDrawShadow(uiWindow ui, list image, float* x, float* y)
+uiWindow uiDrawShadow(uiWindow ui, list shadow, float* x, float* y)
 {
 	return ui;
 }
 
 #endif
+
+//~ <shadow box=10,10,100,100>
+//~ <image file="somewhere.png">
 
 
 //~ // Pars

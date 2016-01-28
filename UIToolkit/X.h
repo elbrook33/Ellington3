@@ -8,7 +8,7 @@
 
 // Requirements
 
-#include "Misc/Helpers.h"
+#include "Misc/Helpers.h"	// For box
 #include <X11/Xlib.h>
 #include <X11/extensions/Xcomposite.h>
 #include <X11/Xatom.h>	// For WINDOW_TYPE
@@ -36,10 +36,16 @@ struct X
 	xWindow	(*panel)	(xWindow root, box);
 	void	(*close)	(xWindow);
 	
+	xWindow	(*wrap)	(xWindow root, Window id);
+	
 	int	(*x)	(xWindow);
 	int	(*y)	(xWindow);
 	int	(*width)	(xWindow);
 	int	(*height)	(xWindow);
+	box (*box)	(xWindow);
+	
+	bool	(*isNormal)	(xWindow);
+	bool	(*isDialog)	(xWindow);
 };
 
 
@@ -145,12 +151,21 @@ bool xIsNormal(xWindow window)
 	
 	Atom flag_normalWindow =
 		XInternAtom(window.display, "_NET_WM_WINDOW_TYPE_NORMAL", false);
+	
+	return window.attributes.override_redirect == false
+		&& (windowType == flag_normalWindow
+			|| windowType == 0);
+}
+
+bool xIsDialog(xWindow window)
+{
+	Atom windowType = xGetWindowType(window);
+	
 	Atom flag_dialogWindow =
 		XInternAtom(window.display, "_NET_WM_WINDOW_TYPE_DIALOG", false);
 	
 	return window.attributes.override_redirect == false
-		&& (windowType == flag_normalWindow
-			|| windowType == flag_dialogWindow
+		&& (windowType == flag_dialogWindow
 			|| windowType == 0);
 }
 
@@ -161,6 +176,9 @@ int xX(xWindow window) { return window.attributes.x; }
 int xY(xWindow window) { return window.attributes.y; }
 int xWidth(xWindow window) { return window.attributes.width; }
 int xHeight(xWindow window) { return window.attributes.height; }
+box xBox(xWindow window) {
+	return xywhBox(window.attributes.x, window.attributes.y, window.attributes.width, window.attributes.height);
+}
 
 struct X X = {
 	xGetRoot,
@@ -168,10 +186,16 @@ struct X X = {
 	xCreatePanel,
 	xClose,
 	
+	xWrap,
+	
 	xX,
 	xY,
 	xWidth,
-	xHeight
+	xHeight,
+	xBox,
+	
+	xIsNormal,
+	xIsDialog
 };
 
 #endif

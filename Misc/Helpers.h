@@ -1,3 +1,17 @@
+/*
+ * Reserved keywords:
+ * 
+ * in (for loops)
+ * to (for indices loops)
+ * where (for filtered loops)
+ * either
+ * then, done
+ * is (eq)
+ * or, and
+ * 
+ */
+
+
 #ifndef HELPERS_H
 #define HELPERS_H
 
@@ -6,14 +20,12 @@
 
 
 // min/max
-
 #define min(a,b)	\
 ({	\
 	typeof (a) _a = (a);	\
 	typeof (b) _b = (b);	\
 	_a < _b ? _a : _b;	\
 })
-
 #define max(a,b)	\
 ({	\
 	typeof (a) _a = (a);	\
@@ -21,36 +33,11 @@
 	_a > _b ? _a : _b;	\
 })
 
-
-// strcount
-
-int strcount(const char* text, char c)
-{
-	int count;
-	for(count = 0; *text; text++)
-		{ count += (*text == c); }
-	return count;
-}
-
-
 // box
-
 typedef struct box
 {
 	float x, y, width, height;
 } box;
-
-bool inBox(box box, float x, float y)
-{
-	return x >= box.x
-		&& x <= box.x + box.width
-		&& y >= box.y
-		&& y <= box.y + box.height;
-}
-
-struct box fitBox(box inner, struct box outer)
-{
-}
 
 struct box xywhBox(float x, float y, float width, float height)
 {
@@ -72,11 +59,18 @@ struct box xyxyBox(float* bounds)
 	return box;
 }
 
+bool inBox(box box, float x, float y)
+{
+	return x >= box.x
+		&& x <= box.x + box.width
+		&& y >= box.y
+		&& y <= box.y + box.height;
+}
 
-// forEach, forEachToken
-
-#define forEach(item_in_list, body)	forEach2(item_in_list, body)
-#define forEach2(item, items, body)	\
+// forEach
+#define in	,
+#define forEach(item_in_list, body)	__forEach(item_in_list, body)
+#define __forEach(item, items, body)	\
 if(items) {	\
 	typeof(*(items)) item = *(items);	\
 	for(int item##Index = 0;	\
@@ -86,11 +80,9 @@ if(items) {	\
 	{ body; }	\
 }
 	
-
-#define in	,
-
-#define forEachToken(token_in_string, delimiter, body)	forEachToken2(token_in_string, delimiter, body)
-#define forEachToken2(token, string, delimiter, body)	\
+// forEachToken
+#define forEachToken(token_in_string, delimiter, body)	__forEachToken(token_in_string, delimiter, body)
+#define __forEachToken(token, string, delimiter, body)	\
 {	\
 	text token##Tail,	\
 		token##Storage = Item.text("tokens", string),	\
@@ -104,37 +96,38 @@ if(items) {	\
 	}	\
 	Item.delete(token##Tail);	\
 }
-	
 
+// forIndices
+#define to	,
+#define where	,
+#define forSomeIndices(var_in_min_to_max_where_condition, body)	\
+	__forSomeIndices(var_in_min_to_max_where_condition, body)
+#define __forSomeIndices(var, a, b, condition, body)	\
+for(int var = a; var <= b; var++) {	\
+	if(!(condition)) { continue; }	\
+	body;	\
+}	
 
-// maybe, ifeq
-
-#define maybe(optional)	optional = optional? optional
-#define onlyIf(optional)	if(optional) optional = false? optional
-
-#define eq(A_is_B) eq2(A_is_B)
-#define eq2(A, B) (strcmp(A, B) == 0)
-#define ifeq(A_is_B, body) if(eq2(A_is_B)) { body; }
-#define is ,
-
+// either-list
 #define either	if(false);
-#define o(condition)	else if(condition)
-#define otherwise true
-
-
-// assert
-
-#define iff(condition_orFail_value) iff2(condition_orFail_value)
-#define iff2(condition, fail)	if(!(condition)) { return fail; }
-#define orFail	,
-
-#define and &&
-#define or ||
-
-
-// for chaining
-
 #define then NULL,
 #define done NULL, NULL
+#define o(condition, then_body)	__o(condition, then_body)
+#define __o(condition, then, body)	else if(condition) { body; }
+#define otherwise	true, NULL
+
+// eq (strcmp)
+#define is	,
+#define eq(A_is_B)	__eq(A_is_B)
+#define __eq(A, B)	(strcmp(A, B) == 0)
+
+// iff (mild assert)
+#define orFail	,
+#define iff(condition_orFail_value)	__iff(condition_orFail_value)
+#define __iff(condition, fail)	if(!(condition)) { return fail; }
+
+// miscellaneous
+#define and	&&
+#define or	||
 
 #endif

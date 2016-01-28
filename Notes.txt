@@ -1,0 +1,8 @@
+
+Options for Ellington Desktop:
+
+1. Don’t bother – I’ve had my programming fun, and LXDE is all I need.
+2. Finish in C. I’ve put some nice tricks in there.
+3. Use C++ – still lets me use libraries (especially XLib and NanoVG), but with a lot of niceties.
+4. Get Swift going.
+5. Something else (Nim? Go?)
